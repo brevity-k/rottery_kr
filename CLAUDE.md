@@ -3,11 +3,15 @@
 ## Project Overview
 
 **Site:** lottery.io.kr (Korean lottery number recommendation)
+**Repo:** github.com/brevity-k/rottery_kr
 **Stack:** Next.js 16 App Router + TypeScript + Tailwind CSS 4 + Chart.js
-**Hosting:** Vercel (free tier)
+**Hosting:** Vercel (free tier) — DEPLOYED & LIVE
+**Domain:** lottery.io.kr (registered at Gabia, DNS pointing to Vercel)
 **Data Source:** superkts.com (pre-fetched to local JSON)
+**Email:** Resend (contact form auto-reply)
 **Language:** Korean only
 **Revenue Model:** Google AdSense
+**Contact:** brevity1s.wos@gmail.com
 
 ---
 
@@ -27,15 +31,17 @@ npm run lint          # Run ESLint
 
 ### Static-First Design
 
-All lottery data is pre-fetched at build time. Zero runtime API calls.
+All lottery data is pre-fetched at build time. Zero runtime API calls (except contact form).
 
 ```
 scripts/update-data.ts  -->  src/data/lotto.json  -->  Build-time reads via fs.readFileSync
+content/blog/*.json     -->  src/lib/blog.ts      -->  Build-time reads via fs.readFileSync
 ```
 
 - `prebuild` script runs `update-data` before every `next build`
-- Data is cached in memory after first read (`dhlottery.ts`)
-- All pages are statically generated, including `/lotto/results/[round]` via `generateStaticParams()`
+- Data is cached in memory after first read (`dhlottery.ts`, `blog.ts`)
+- All pages are statically generated, including `/lotto/results/[round]` and `/blog/[slug]` via `generateStaticParams()`
+- Only dynamic route: `/api/contact` (serverless function for email)
 
 ### Data Flow
 
@@ -58,20 +64,21 @@ rottery_kr/
 ├── tsconfig.json                      # TypeScript configuration
 ├── postcss.config.mjs                 # PostCSS + Tailwind
 ├── public/
-│   ├── robots.txt                     # Search engine crawl rules
+│   ├── robots.txt                     # Search engine crawl rules (lottery.io.kr)
 │   └── ads.txt                        # AdSense publisher verification
 ├── scripts/
 │   ├── update-data.ts                 # Fetches lottery data from superkts.com
 │   ├── generate-blog-post.ts          # Generates blog post via Claude Haiku API
 │   └── blog-topics.json               # 8 topic templates for blog rotation
 ├── content/
-│   └── blog/                          # Blog post JSON files (auto-generated + seed)
+│   └── blog/                          # Blog post JSON files (8 posts: 3 seed + 5 math)
 ├── .github/
 │   └── workflows/
-│       └── generate-blog-post.yml     # Weekly cron (Sunday 10:00 KST)
+│       ├── update-data.yml            # Weekly data update (Sunday 00:00 KST)
+│       └── generate-blog-post.yml     # Weekly blog generation (Sunday 10:00 KST)
 └── src/
     ├── data/
-    │   └── lotto.json                 # Pre-fetched lottery data (all rounds)
+    │   └── lotto.json                 # Pre-fetched lottery data (all rounds, with prizes)
     ├── types/
     │   └── lottery.ts                 # TypeScript type definitions (LottoResult, BlogPost, etc.)
     ├── lib/
@@ -86,11 +93,11 @@ rottery_kr/
     │       └── markdown.ts            # Zero-dependency markdown-to-HTML converter
     ├── components/
     │   ├── layout/
-    │   │   ├── Header.tsx             # Responsive header with mobile menu
-    │   │   └── Footer.tsx             # 3-column footer with links
+    │   │   ├── Header.tsx             # Responsive header with mobile menu (includes 블로그)
+    │   │   └── Footer.tsx             # 3-column footer with links (includes 블로그)
     │   ├── lottery/
     │   │   ├── LottoBall.tsx          # Colored ball (official 5-color scheme)
-    │   │   ├── LottoResultCard.tsx    # Result display card
+    │   │   ├── LottoResultCard.tsx    # Result display card (prize per winner + total)
     │   │   └── RecommendResult.tsx    # Client component with copy/share
     │   ├── charts/
     │   │   └── FrequencyChart.tsx     # Chart.js bar chart
@@ -98,10 +105,12 @@ rottery_kr/
     │       └── AdBanner.tsx           # AdSense wrapper (placeholder in dev)
     └── app/
         ├── layout.tsx                 # Root layout (Korean, Pretendard font)
-        ├── page.tsx                   # Homepage
+        ├── page.tsx                   # Homepage (includes 최근 블로그 글 section)
         ├── not-found.tsx              # 404 page
-        ├── sitemap.ts                 # Dynamic sitemap generator
+        ├── sitemap.ts                 # Dynamic sitemap (lotto rounds + blog posts)
         ├── globals.css                # Tailwind imports + custom styles
+        ├── api/
+        │   └── contact/route.ts       # Contact form API (Resend email + auto-reply)
         ├── lotto/
         │   ├── page.tsx               # Lotto landing page
         │   ├── recommend/
@@ -113,11 +122,13 @@ rottery_kr/
         │   └── stats/page.tsx         # Statistics & frequency analysis
         ├── blog/
         │   ├── page.tsx               # Blog list page
-        │   └── [slug]/page.tsx        # Blog detail (statically generated)
+        │   └── [slug]/page.tsx        # Blog detail (async params, statically generated)
         ├── about/page.tsx             # About page
         ├── privacy/page.tsx           # Privacy policy
         ├── terms/page.tsx             # Terms of service
-        └── contact/page.tsx           # Contact page (brevity1s.wos@gmail.com)
+        └── contact/
+            ├── page.tsx               # Contact page (server, metadata)
+            └── ContactForm.tsx        # Contact form (client component)
 ```
 
 ---
@@ -134,125 +145,6 @@ Six methods implemented in `src/lib/lottery/recommend.ts`:
 | `cold` | 콜드넘버 기반 | Inverse recent frequency weighting |
 | `balanced` | 균형 추천 | 1 number per section (1-9, 10-18, 19-27, 28-36, 37-45) + odd/even balance |
 | `ai` | AI 종합 추천 | Composite: 20% all-time + 25% hot + 15% cold + 30% random + balance filter |
-
----
-
-## Data Credibility Verification
-
-Data from superkts.com was cross-verified against 4 independent sources for rounds 1208-1210:
-
-### Round 1210 (2026-02-07): 1, 7, 9, 17, 27, 38 + Bonus 31
-
-| Source | Numbers Match | Bonus Match |
-|--------|-------------|-------------|
-| superkts.com (our source) | Baseline | Baseline |
-| kr.lottolyzer.com | Yes | Yes |
-| picknum.com | Yes | Yes |
-| Korean news (khan.co.kr, mt.co.kr) | Yes | Yes |
-
-### Round 1209 (2026-01-31): 2, 17, 20, 35, 37, 39 + Bonus 24
-
-| Source | Numbers Match | Bonus Match |
-|--------|-------------|-------------|
-| superkts.com | Baseline | Baseline |
-| kr.lottolyzer.com | Yes | Yes |
-| picknum.com | Yes | Yes |
-| Korean news (khan.co.kr, namdonews.com) | Yes | Yes |
-
-### Round 1208 (2026-01-24): 6, 27, 30, 36, 38, 42 + Bonus 25
-
-| Source | Numbers Match | Bonus Match |
-|--------|-------------|-------------|
-| superkts.com | Baseline | Baseline |
-| kr.lottolyzer.com | Yes | Yes |
-| picknum.com | Yes | Yes |
-| Korean news (khan.co.kr, news1.kr) | Yes | Yes |
-
-**Credibility Rating: HIGH** - 100% consistency across all sources for all tested rounds.
-
-**Note:** dhlottery.co.kr (official government site) was inaccessible programmatically due to RSA bot protection. All other sources ultimately derive their data from the official draws.
-
----
-
-## Deployment Plan
-
-### Prerequisites
-
-1. **GitHub Repository:** Push code to GitHub (currently at `github.com/brevity-k/rotter_kr`)
-2. **Vercel Account:** Sign up at vercel.com and connect your GitHub repo
-3. **Domain:** Configure `lottery.io.kr` DNS to point to Vercel
-
-### Deploy Steps
-
-1. Push to GitHub (any branch triggers deploy if connected to Vercel)
-2. Vercel automatically runs `npm run build` which:
-   - Runs `prebuild` script (fetches latest lottery data from superkts.com)
-   - Builds all static pages
-   - Deploys to CDN
-3. Custom domain setup in Vercel dashboard
-
-### Updating Lottery Data
-
-Data is updated automatically on every build via the `prebuild` script. To trigger a data update:
-- Push any commit (triggers Vercel rebuild)
-- Or use Vercel dashboard "Redeploy" button
-- For automated weekly updates, use GitHub Actions cron (see Auto Blog section below)
-
----
-
-## Google AdSense Setup
-
-### What You Need to Provide
-
-1. **Google AdSense Account**
-   - Sign up at [adsense.google.com](https://adsense.google.com)
-   - Need a Google account
-   - Site must be live and accessible for review
-
-2. **AdSense Publisher ID** (format: `ca-pub-XXXXXXXXXXXXXXXX`)
-   - After approval, update `public/ads.txt` with your publisher ID:
-     ```
-     google.com, pub-XXXXXXXXXXXXXXXX, DIRECT, f08c47fec0942fa0
-     ```
-   - Update `src/components/ads/AdBanner.tsx` to use your client ID
-
-3. **AdSense Script Tag**
-   - Add to `src/app/layout.tsx` in `<head>`:
-     ```html
-     <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-XXXXXXXXXXXXXXXX" crossorigin="anonymous"></script>
-     ```
-
-4. **Ad Unit IDs**
-   - Create ad units in AdSense dashboard for each placement
-   - The site has 5+ ad placements ready (see `AdBanner` component usage in pages)
-   - Recommended formats: responsive banner, in-article, sidebar
-
-### AdSense Approval Requirements (Already Satisfied)
-
-The site already has these pages required for AdSense approval:
-- `/about` - About page
-- `/privacy` - Privacy policy (mentions AdSense cookies, Google Analytics)
-- `/terms` - Terms of service
-- `/contact` - Contact page
-
-Additional requirements:
-- Site must have sufficient original content (we have 1,210+ rounds of data + stats + recommendations)
-- Site must be at least a few weeks old with regular traffic
-- No copyright-infringing content
-- Must be in a supported language (Korean is supported)
-
-### AdSense Integration Checklist
-
-- [ ] Sign up for Google AdSense
-- [ ] Submit site for review (lottery.io.kr)
-- [ ] Wait for approval (typically 1-4 weeks)
-- [ ] Get Publisher ID (`ca-pub-XXXXXXXXXXXXXXXX`)
-- [ ] Update `public/ads.txt` with publisher ID
-- [ ] Add AdSense script tag to `layout.tsx`
-- [ ] Create ad units in AdSense dashboard
-- [ ] Update `AdBanner.tsx` component with real ad unit IDs
-- [ ] Test ad display on live site
-- [ ] Monitor earnings in AdSense dashboard
 
 ---
 
@@ -276,6 +168,8 @@ GitHub Actions (cron: Sunday 10:00 KST)
 3. `src/lib/utils/markdown.ts` converts markdown content to HTML (zero dependencies)
 4. `/blog` list page and `/blog/[slug]` detail pages are statically generated via `generateStaticParams()`
 5. Blog URLs are included in `sitemap.ts`, nav header, footer, and homepage
+
+**Important:** `/blog/[slug]/page.tsx` uses `async` params (`Promise<{ slug: string }>`) as required by Next.js 16.
 
 ### Blog Post Format (JSON)
 
@@ -308,25 +202,25 @@ GitHub Actions (cron: Sunday 10:00 KST)
 
 The script auto-selects: draw analysis for new rounds first, then rotates other topics by week number.
 
+### Current Blog Posts (8)
+
+| Slug | Category | Description |
+|------|----------|-------------|
+| `1210-draw-analysis` | 당첨번호 분석 | Round 1210 draw analysis |
+| `lotto-number-selection-strategies` | 전략 가이드 | 5 number selection strategies |
+| `understanding-lotto-probability` | 교육 | Lottery probability explained |
+| `gamblers-fallacy` | 수학과 확률 | Gambler's Fallacy and independence |
+| `expected-value-lottery` | 수학과 확률 | Expected value of a 1,000 won ticket |
+| `birthday-paradox-lottery` | 수학과 확률 | Birthday paradox applied to lottery |
+| `law-of-large-numbers` | 수학과 확률 | Convergence proven with 1,200 draws |
+| `monte-carlo-simulation-lottery` | 수학과 확률 | Simulating 1M lottery purchases |
+
 ### Schedule & Cost
 
 - **Frequency:** Weekly (Sunday 10:00 KST via GitHub Actions cron)
 - **Model:** Claude Haiku 4.5 (`claude-haiku-4-5-20251001`)
 - **Cost:** ~$0.88/year for 52 weekly posts
 - **Manual trigger:** `workflow_dispatch` enabled in GitHub Actions
-
-### Required Setup
-
-- [ ] Add `ANTHROPIC_API_KEY` as GitHub Actions secret (Settings > Secrets > Actions)
-- Get key from [console.anthropic.com](https://console.anthropic.com)
-
-### Seed Posts (3 included)
-
-| Slug | Category |
-|------|----------|
-| `1210-draw-analysis` | 당첨번호 분석 |
-| `lotto-number-selection-strategies` | 전략 가이드 |
-| `understanding-lotto-probability` | 교육 |
 
 ### SEO Best Practices
 
@@ -335,6 +229,111 @@ The script auto-selects: draw analysis for new rounds first, then rotates other 
 - Each post targets distinct long-tail keywords
 - AI disclaimer included: "이 글은 AI 분석 도구의 도움을 받아 작성되었으며, 실제 당첨 데이터를 기반으로 합니다."
 - Monitor Google Search Console and Naver Search Advisor
+
+---
+
+## GitHub Actions Workflows
+
+### 1. Data Update (`update-data.yml`)
+
+- **Schedule:** Saturday 15:00 UTC = Sunday 00:00 KST (after Saturday lottery draw)
+- **Action:** Fetches latest lottery data, commits `src/data/lotto.json` if changed
+- **Trigger:** Also available via `workflow_dispatch`
+
+### 2. Blog Generation (`generate-blog-post.yml`)
+
+- **Schedule:** Sunday 01:00 UTC = Sunday 10:00 KST
+- **Action:** Updates data + generates blog post via Claude API + commits
+- **Requires:** `ANTHROPIC_API_KEY` GitHub Actions secret
+
+---
+
+## Contact Form & Auto Email (IMPLEMENTED)
+
+### Architecture
+
+```
+User fills form → POST /api/contact → Resend API
+  → Email to owner (brevity1s.wos@gmail.com)
+  → Auto-reply to submitter (confirmation email)
+```
+
+### Components
+
+- **`src/app/contact/ContactForm.tsx`** — Client component with form state, validation, success/error handling
+- **`src/app/contact/page.tsx`** — Server component with metadata + ContactForm
+- **`src/app/api/contact/route.ts`** — API route: validates input, sends 2 emails via Resend
+
+### Email Details
+
+- **To owner:** `[로또리 문의] {subject}` — includes name, email, subject, message
+- **Auto-reply:** `[로또리] 문의가 접수되었습니다` — confirms receipt, includes original message
+
+### Required Setup
+
+- Add `RESEND_API_KEY` as Vercel environment variable
+- Sign up at [resend.com](https://resend.com) (free: 3,000 emails/month)
+- Optional: Add `lottery.io.kr` domain in Resend for branded sender (instead of `onboarding@resend.dev`)
+
+---
+
+## Deployment (COMPLETE)
+
+### Current Setup
+
+- **Vercel:** Connected to `github.com/brevity-k/rottery_kr`, auto-deploys on push
+- **Domain:** `lottery.io.kr` (Gabia → Vercel DNS)
+- **SSL:** Auto-provisioned by Vercel
+
+### DNS Records (at Gabia)
+
+| Type | Host | Value |
+|------|------|-------|
+| A | `@` | `76.76.21.21` |
+| CNAME | `www` | `cname.vercel-dns.com` |
+| TXT | `_vercel` | `vc-domain-verify=...` |
+
+### Environment Variables
+
+#### Vercel (Settings > Environment Variables)
+
+| Key | Purpose |
+|-----|---------|
+| `RESEND_API_KEY` | Contact form email delivery |
+| `ANTHROPIC_API_KEY` | Blog generation (optional, only if running generate-blog on Vercel) |
+
+#### GitHub Actions (Settings > Secrets > Actions)
+
+| Secret | Purpose |
+|--------|---------|
+| `ANTHROPIC_API_KEY` | Weekly auto blog generation |
+
+### Setup Checklist
+
+- [x] Deploy to Vercel (import GitHub repo)
+- [x] Configure DNS for `lottery.io.kr` → Vercel
+- [x] SSL certificate (automatic)
+- [ ] Add `RESEND_API_KEY` to Vercel environment variables
+- [ ] Add `ANTHROPIC_API_KEY` to GitHub Actions secrets
+- [ ] (Optional) Add `lottery.io.kr` domain to Resend for branded emails
+
+---
+
+## Google AdSense Setup
+
+### AdSense Integration Checklist
+
+- [ ] Sign up for Google AdSense
+- [ ] Submit site for review (lottery.io.kr)
+- [ ] Wait for approval (typically 1-4 weeks)
+- [ ] Get Publisher ID (`ca-pub-XXXXXXXXXXXXXXXX`)
+- [ ] Update `public/ads.txt` with publisher ID
+- [ ] Add AdSense script tag to `layout.tsx`
+- [ ] Create ad units in AdSense dashboard
+- [ ] Update `AdBanner.tsx` component with real ad unit IDs
+- [ ] Test ad display on live site
+
+The site already has AdSense-required pages (`/about`, `/privacy`, `/terms`, `/contact`) and 5+ ad placement slots ready.
 
 ---
 
@@ -354,12 +353,29 @@ The HTML body extraction only runs when `winners > 0` to avoid picking up 2nd pr
 
 Out of 1,210 rounds: 1,196 have prize data, 14 have `firstWinamnt: 0` (no 1st prize winners — rounds 1, 4, 5, 7, 8, 9, 13, 18, 24, 41, 71, 289, 295, 463).
 
+### Result Card Display
+
+`LottoResultCard.tsx` shows:
+- **1등 당첨금 (1인):** per-winner prize from `firstWinamnt`
+- **1등 당첨자:** winner count from `firstPrzwnerCo`
+- **총 1등 당첨금:** calculated as `firstWinamnt * firstPrzwnerCo`
+- Rounds with no winners show "해당 없음"
+
+### Next.js 16 Async Params
+
+In Next.js 16, dynamic route `params` is a `Promise` that must be `await`ed. Both `[round]/page.tsx` and `[slug]/page.tsx` use `params: Promise<{...}>` with `await params`.
+
 ### Git Push Authentication
 
-If pushing to GitHub fails with 403, it may be because macOS Keychain caches a different GitHub account's credentials (`psychemistz`). Workaround:
+The remote URL includes the GitHub PAT for auth (avoids macOS Keychain conflict with `psychemistz` account):
 
+```
+origin https://brevity-k:<PAT>@github.com/brevity-k/rottery_kr.git
+```
+
+If the PAT expires, update with:
 ```bash
-git -c http.extraHeader="Authorization: Basic $(echo -n 'brevity-k:YOUR_GITHUB_PAT' | base64)" push origin main
+git remote set-url origin https://brevity-k:<NEW_PAT>@github.com/brevity-k/rottery_kr.git
 ```
 
 ### Performance
@@ -372,13 +388,30 @@ The site was originally making 50-100 API calls per page load to dhlottery.co.kr
 
 ---
 
+## Data Credibility Verification
+
+Data from superkts.com was cross-verified against 4 independent sources for rounds 1208-1210:
+
+### Round 1210 (2026-02-07): 1, 7, 9, 17, 27, 38 + Bonus 31
+
+| Source | Numbers Match | Bonus Match |
+|--------|-------------|-------------|
+| superkts.com (our source) | Baseline | Baseline |
+| kr.lottolyzer.com | Yes | Yes |
+| picknum.com | Yes | Yes |
+| Korean news (khan.co.kr, mt.co.kr) | Yes | Yes |
+
+**Credibility Rating: HIGH** - 100% consistency across all sources for all tested rounds.
+
+---
+
 ## Phase Roadmap (from PLAN.md)
 
 | Phase | Status | Description |
 |-------|--------|-------------|
 | Phase 1 | COMPLETE | Lotto 6/45 - core site, recommendations, stats, results |
 | Phase 2 | Not started | Add pension lottery (연금복권 720+), more lottery types |
-| Phase 3 | IN PROGRESS | Blog system (DONE), community features, push notifications |
+| Phase 3 | IN PROGRESS | Blog system (DONE), contact form (DONE), community features, push notifications |
 | Phase 4 | Not started | Mobile app (PWA), premium features |
 
 ---
@@ -391,6 +424,7 @@ The site was originally making 50-100 API calls per page load to dhlottery.co.kr
 - `chart.js` ^4.5.1
 - `react-chartjs-2` ^5.3.1
 - `@vercel/analytics` ^1.6.1
+- `resend` (contact form email)
 
 ### Development
 - `typescript` ^5
