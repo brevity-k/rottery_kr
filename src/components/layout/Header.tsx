@@ -8,6 +8,7 @@ const navItems = [
   { href: "/lotto/recommend", label: "번호 추천" },
   { href: "/lotto/results", label: "당첨번호" },
   { href: "/lotto/stats", label: "통계 분석" },
+  { href: "/blog", label: "블로그" },
 ];
 
 export default function Header() {

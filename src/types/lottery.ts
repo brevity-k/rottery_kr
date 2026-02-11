@@ -49,3 +49,13 @@ export interface LottoStats {
   hottestNumbers: number[];
   coldestNumbers: number[];
 }
+
+export interface BlogPost {
+  slug: string;
+  title: string;
+  description: string;
+  content: string;
+  date: string;
+  category: string;
+  tags: string[];
+}

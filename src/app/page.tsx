@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { getLatestRound, getLottoResult, getRecentResults } from "@/lib/api/dhlottery";
 import { calculateStats } from "@/lib/lottery/stats";
+import { getRecentBlogPosts } from "@/lib/blog";
 import LottoResultCard from "@/components/lottery/LottoResultCard";
 import AdBanner from "@/components/ads/AdBanner";
 import LottoBall from "@/components/lottery/LottoBall";
@@ -41,6 +42,7 @@ export default function Home() {
   const latestResult = getLottoResult(latestRound);
   const recentResults = getRecentResults(50);
   const stats = calculateStats(recentResults, 10);
+  const recentPosts = getRecentBlogPosts(3);
 
   return (
     <div className="max-w-6xl mx-auto px-4 py-8">
@@ -131,6 +133,38 @@ export default function Home() {
       </section>
 
       <AdBanner slot="home-bottom" format="horizontal" className="mb-10" />
+
+      {/* Recent Blog Posts */}
+      {recentPosts.length > 0 && (
+        <section className="mb-10">
+          <div className="flex items-center justify-between mb-6">
+            <h2 className="text-2xl font-bold text-gray-900">최근 블로그 글</h2>
+            <Link
+              href="/blog"
+              className="text-blue-600 text-sm font-medium hover:text-blue-700"
+            >
+              전체보기 &rarr;
+            </Link>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            {recentPosts.map((post) => (
+              <Link
+                key={post.slug}
+                href={`/blog/${post.slug}`}
+                className="bg-white rounded-2xl border border-gray-200 p-5 shadow-sm hover:shadow-md hover:border-blue-300 transition-all"
+              >
+                <span className="text-xs font-medium text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full">
+                  {post.category}
+                </span>
+                <h3 className="font-bold text-gray-900 mt-2 mb-1 text-sm line-clamp-2">
+                  {post.title}
+                </h3>
+                <p className="text-xs text-gray-500">{post.date}</p>
+              </Link>
+            ))}
+          </div>
+        </section>
+      )}
 
       {/* Info Section for SEO */}
       <section className="bg-white rounded-2xl border border-gray-200 p-8 shadow-sm mb-10">

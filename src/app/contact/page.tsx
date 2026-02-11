@@ -20,7 +20,7 @@ export default function ContactPage() {
             <span className="text-xl">📧</span>
             <div>
               <h3 className="font-semibold text-gray-900">이메일</h3>
-              <p className="text-gray-600 text-sm">contact@rottery.kr</p>
+              <p className="text-gray-600 text-sm">brevity1s.wos@gmail.com</p>
             </div>
           </div>
 

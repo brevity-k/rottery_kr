@@ -23,6 +23,7 @@ export default function Footer() {
               <li><Link href="/lotto/recommend" className="hover:text-white transition-colors">번호 추천</Link></li>
               <li><Link href="/lotto/results" className="hover:text-white transition-colors">당첨번호 조회</Link></li>
               <li><Link href="/lotto/stats" className="hover:text-white transition-colors">통계 분석</Link></li>
+              <li><Link href="/blog" className="hover:text-white transition-colors">블로그</Link></li>
             </ul>
           </div>
 
