@@ -33,6 +33,13 @@ const features = [
     href: "/lotto/stats",
     cta: "분석보기",
   },
+  {
+    icon: "💰",
+    title: "세금 계산기",
+    desc: "당첨금 실수령액과 세금을 간편하게 계산",
+    href: "/lotto/tax",
+    cta: "계산하기",
+  },
 ];
 
 export default function LottoPage() {
@@ -56,7 +63,7 @@ export default function LottoPage() {
       <AdBanner slot="lotto-top" format="horizontal" className="mb-8" />
 
       <section className="mb-8">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
           {features.map((f) => (
             <Link
               key={f.href}
