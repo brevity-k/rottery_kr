@@ -33,6 +33,9 @@ export const metadata: Metadata = {
     locale: "ko_KR",
     type: "website",
   },
+  other: {
+    "theme-color": "#2563eb",
+  },
   robots: {
     index: true,
     follow: true,
