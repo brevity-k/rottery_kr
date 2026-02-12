@@ -6,6 +6,7 @@
  */
 
 import * as fs from "fs";
+import * as path from "path";
 
 interface LottoResult {
   drwNo: number;
@@ -31,6 +32,91 @@ interface LottoDataFile {
 }
 
 const OUTPUT_PATH = "./src/data/lotto.json";
+const BACKUP_PATH = "./src/data/lotto.json.bak";
+
+async function fetchWithRetry(
+  url: string,
+  options: RequestInit = {},
+  maxRetries = 3
+): Promise<Response> {
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      const res = await fetch(url, options);
+      if (!res.ok && attempt < maxRetries) {
+        const delay = Math.pow(2, attempt - 1) * 1000;
+        console.warn(`⚠️ Fetch failed (${res.status}), retrying in ${delay / 1000}s... (attempt ${attempt}/${maxRetries})`);
+        await new Promise((r) => setTimeout(r, delay));
+        continue;
+      }
+      return res;
+    } catch (err) {
+      if (attempt < maxRetries) {
+        const delay = Math.pow(2, attempt - 1) * 1000;
+        console.warn(`⚠️ Fetch error, retrying in ${delay / 1000}s... (attempt ${attempt}/${maxRetries}): ${err}`);
+        await new Promise((r) => setTimeout(r, delay));
+      } else {
+        throw err;
+      }
+    }
+  }
+  throw new Error("fetchWithRetry: exhausted all retries");
+}
+
+function validateData(draws: LottoResult[]): { valid: boolean; errors: string[] } {
+  const errors: string[] = [];
+
+  if (draws.length === 0) {
+    errors.push("No draws found");
+    return { valid: false, errors };
+  }
+
+  for (const draw of draws) {
+    const nums = [draw.drwtNo1, draw.drwtNo2, draw.drwtNo3, draw.drwtNo4, draw.drwtNo5, draw.drwtNo6];
+
+    // Check numbers in 1-45 range
+    for (const n of nums) {
+      if (n < 1 || n > 45) {
+        errors.push(`Round ${draw.drwNo}: number ${n} out of range 1-45`);
+      }
+    }
+
+    // Check bonus number in range
+    if (draw.bnusNo < 1 || draw.bnusNo > 45) {
+      errors.push(`Round ${draw.drwNo}: bonus ${draw.bnusNo} out of range 1-45`);
+    }
+
+    // Check no duplicates in main numbers
+    if (new Set(nums).size !== 6) {
+      errors.push(`Round ${draw.drwNo}: duplicate numbers found in ${nums.join(",")}`);
+    }
+
+    // Check valid date format (YYYY-MM-DD)
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(draw.drwNoDate)) {
+      errors.push(`Round ${draw.drwNo}: invalid date format "${draw.drwNoDate}"`);
+    }
+  }
+
+  // Check sequential round numbers
+  const sorted = [...draws].sort((a, b) => a.drwNo - b.drwNo);
+  for (let i = 1; i < sorted.length; i++) {
+    if (sorted[i].drwNo !== sorted[i - 1].drwNo + 1) {
+      errors.push(`Missing round(s) between ${sorted[i - 1].drwNo} and ${sorted[i].drwNo}`);
+    }
+  }
+
+  return { valid: errors.length === 0, errors };
+}
+
+function backupExistingData(): void {
+  try {
+    if (fs.existsSync(OUTPUT_PATH)) {
+      fs.copyFileSync(OUTPUT_PATH, BACKUP_PATH);
+      console.log(`📦 Backup created: ${BACKUP_PATH}`);
+    }
+  } catch (err) {
+    console.warn(`⚠️ Failed to create backup: ${err}`);
+  }
+}
 
 function parseKoreanAmount(text: string): number {
   let amount = 0;
@@ -55,7 +141,7 @@ function parseCommaNumber(text: string): number {
 
 async function fetchRound(round: number): Promise<LottoResult | null> {
   try {
-    const res = await fetch(`https://superkts.com/lotto/${round}`, {
+    const res = await fetchWithRetry(`https://superkts.com/lotto/${round}`, {
       headers: { "User-Agent": "Mozilla/5.0" },
     });
     const html = await res.text();
@@ -200,12 +286,33 @@ async function fetchAllData(): Promise<void> {
 
   allDraws.sort((a, b) => b.drwNo - a.drwNo);
 
+  // Validate data before writing
+  console.log("\n🔍 Validating data...");
+  const validation = validateData(allDraws);
+  if (!validation.valid) {
+    console.error("❌ Data validation failed:");
+    for (const err of validation.errors) {
+      console.error(`   - ${err}`);
+    }
+    process.exit(1);
+  }
+  console.log("✅ Data validation passed");
+
+  // Backup existing data before overwrite
+  backupExistingData();
+
   const output: LottoDataFile = {
     lottery: "lotto645",
     lastUpdated: new Date().toISOString(),
     latestRound,
     draws: allDraws,
   };
+
+  // Ensure output directory exists
+  const outputDir = path.dirname(OUTPUT_PATH);
+  if (!fs.existsSync(outputDir)) {
+    fs.mkdirSync(outputDir, { recursive: true });
+  }
 
   fs.writeFileSync(OUTPUT_PATH, JSON.stringify(output));
 

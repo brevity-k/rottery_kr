@@ -25,6 +25,7 @@ export default function Footer() {
               <li><Link href="/lotto/stats" className="hover:text-white transition-colors">통계 분석</Link></li>
               <li><Link href="/lotto/tax" className="hover:text-white transition-colors">세금 계산기</Link></li>
               <li><Link href="/lotto/simulator" className="hover:text-white transition-colors">시뮬레이터</Link></li>
+              <li><Link href="/lotto/lucky" className="hover:text-white transition-colors">오늘의 행운 번호</Link></li>
               <li><Link href="/lotto/numbers" className="hover:text-white transition-colors">번호별 통계</Link></li>
               <li><Link href="/blog" className="hover:text-white transition-colors">블로그</Link></li>
             </ul>

@@ -76,6 +76,7 @@ function selectTopic(topics: TopicConfig[], data: LottoDataFile): {
   const latest = data.draws[0];
   const numbers = getNumbers(latest);
   const numbersStr = numbers.join(", ");
+  const nextRound = String(latest.drwNo + 1);
 
   // Check what posts already exist
   const existingFiles = fs.existsSync(BLOG_DIR)
@@ -92,6 +93,7 @@ function selectTopic(topics: TopicConfig[], data: LottoDataFile): {
         round: String(latest.drwNo),
         numbers: numbersStr,
         bonus: String(latest.bnusNo),
+        nextRound,
       },
     };
   }
@@ -124,6 +126,7 @@ function selectTopic(topics: TopicConfig[], data: LottoDataFile): {
       dateRange: `${dateStart} ~ ${dateEnd}`,
       totalDraws: String(data.draws.length),
       targetNumber,
+      nextRound,
     },
   };
 }
@@ -145,6 +148,45 @@ function buildContext(data: LottoDataFile): string {
   return `최근 10회차 당첨번호:\n${lines.join("\n")}`;
 }
 
+async function callClaudeWithRetry(
+  client: Anthropic,
+  params: Anthropic.MessageCreateParamsNonStreaming,
+  maxRetries = 3
+): Promise<Anthropic.Message> {
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      return await client.messages.create(params);
+    } catch (err) {
+      if (attempt < maxRetries) {
+        const delay = Math.pow(2, attempt - 1) * 1000;
+        console.warn(`⚠️ API call failed, retrying in ${delay / 1000}s... (attempt ${attempt}/${maxRetries}): ${err}`);
+        await new Promise((r) => setTimeout(r, delay));
+      } else {
+        throw err;
+      }
+    }
+  }
+  throw new Error("callClaudeWithRetry: exhausted all retries");
+}
+
+function validateContent(content: string): string[] {
+  const warnings: string[] = [];
+
+  if (content.length < 800) {
+    warnings.push(`Content too short (${content.length} chars, minimum 800)`);
+  }
+
+  if (!content.includes("AI 분석 도구") && !content.includes("AI가")) {
+    warnings.push("Missing AI disclaimer");
+  }
+
+  if (!content.includes("##")) {
+    warnings.push("No markdown headings found");
+  }
+
+  return warnings;
+}
+
 async function generatePost(): Promise<void> {
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) {
@@ -163,14 +205,28 @@ async function generatePost(): Promise<void> {
   const tags = topic.tags.map((t) => fillTemplate(t, vars));
   const context = buildContext(data);
 
+  // Generate slug
+  const today = new Date().toISOString().slice(0, 10);
+  const slug =
+    topic.id === "draw-analysis"
+      ? `${vars.round}-draw-analysis`
+      : `${topic.id}-${today}`;
+
+  // Duplicate prevention: check if output file already exists
+  const outputPath = path.join(BLOG_DIR, `${slug}.json`);
+  if (fs.existsSync(outputPath)) {
+    console.log(`✅ Post already exists: ${outputPath} — skipping.`);
+    process.exit(0);
+  }
+
   console.log(`📝 Generating: ${title}`);
   console.log(`   Topic: ${topic.id}`);
 
   const client = new Anthropic({ apiKey });
 
-  const message = await client.messages.create({
+  const message = await callClaudeWithRetry(client, {
     model: "claude-haiku-4-5-20251001",
-    max_tokens: 2000,
+    max_tokens: 4000,
     messages: [
       {
         role: "user",
@@ -185,7 +241,7 @@ ${prompt}
 작성 규칙:
 - 한국어로 작성
 - 마크다운 형식 (##, **, -, 등)
-- 600~1000단어
+- 1500~2500단어
 - 데이터에 기반한 사실만 언급
 - 마지막에 다음 문구를 포함: "이 글은 AI 분석 도구의 도움을 받아 작성되었으며, 실제 당첨 데이터를 기반으로 합니다."
 - "당첨을 보장하지 않는다"는 면책 문구 포함`,
@@ -201,12 +257,14 @@ ${prompt}
     process.exit(1);
   }
 
-  // Generate slug
-  const today = new Date().toISOString().slice(0, 10);
-  const slug =
-    topic.id === "draw-analysis"
-      ? `${vars.round}-draw-analysis`
-      : `${topic.id}-${today}`;
+  // Validate content
+  const warnings = validateContent(content);
+  if (warnings.length > 0) {
+    console.warn("⚠️ Content validation warnings:");
+    for (const w of warnings) {
+      console.warn(`   - ${w}`);
+    }
+  }
 
   // Create description from first paragraph
   const firstParagraph = content
@@ -230,12 +288,11 @@ ${prompt}
     fs.mkdirSync(BLOG_DIR, { recursive: true });
   }
 
-  const outputPath = path.join(BLOG_DIR, `${slug}.json`);
   fs.writeFileSync(outputPath, JSON.stringify(post, null, 2));
 
   console.log(`✅ Blog post saved: ${outputPath}`);
   console.log(`   Slug: ${slug}`);
-  console.log(`   Words: ~${content.split(/\s+/).length}`);
+  console.log(`   Length: ${content.length} chars`);
 }
 
 generatePost().catch((err) => {

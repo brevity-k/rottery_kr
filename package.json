@@ -9,6 +9,8 @@
     "lint": "eslint",
     "update-data": "tsx scripts/update-data.ts",
     "generate-blog": "tsx scripts/generate-blog-post.ts",
+    "generate-prediction": "tsx scripts/generate-prediction.ts",
+    "health-check": "tsx scripts/health-check.ts",
     "prebuild": "tsx scripts/update-data.ts"
   },
   "dependencies": {
