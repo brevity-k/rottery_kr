@@ -19,11 +19,13 @@
 ## Quick Commands
 
 ```bash
-npm run dev           # Start dev server (localhost:3000)
-npm run build         # Build for production (runs update-data first via prebuild)
-npm run update-data   # Fetch latest lottery data from superkts.com
-npm run generate-blog # Generate a blog post via Claude Haiku API (needs ANTHROPIC_API_KEY)
-npm run lint          # Run ESLint
+npm run dev                 # Start dev server (localhost:3000)
+npm run build               # Build for production (runs update-data first via prebuild)
+npm run update-data         # Fetch latest lottery data from superkts.com
+npm run generate-blog       # Generate a blog post via Claude Haiku API (needs ANTHROPIC_API_KEY)
+npm run generate-prediction # Generate prediction post for next draw (needs ANTHROPIC_API_KEY)
+npm run health-check        # Run health checks (data freshness, integrity, blog, critical files)
+npm run lint                # Run ESLint
 ```
 
 ---
@@ -68,15 +70,19 @@ lottery_kr/
 │   ├── robots.txt                     # Search engine crawl rules (lottery.io.kr)
 │   └── ads.txt                        # AdSense publisher verification
 ├── scripts/
-│   ├── update-data.ts                 # Fetches lottery data from superkts.com
-│   ├── generate-blog-post.ts          # Generates blog post via Claude Haiku API
-│   └── blog-topics.json               # 8 topic templates for blog rotation
+│   ├── update-data.ts                 # Fetches lottery data (retry + validation + backup)
+│   ├── generate-blog-post.ts          # Generates blog post via Claude Haiku API (retry + validation)
+│   ├── generate-prediction.ts         # Generates weekly prediction post (Friday before draw)
+│   ├── health-check.ts               # Validates data freshness, integrity, blog, critical files
+│   └── blog-topics.json               # 12 topic templates for blog rotation
 ├── content/
 │   └── blog/                          # Blog post JSON files (auto-generated weekly)
 ├── .github/
 │   └── workflows/
-│       ├── update-data.yml            # Weekly data update (Sunday 00:00 KST)
-│       └── generate-blog-post.yml     # Weekly blog generation (Sunday 10:00 KST)
+│       ├── update-data.yml            # Weekly data update (Sunday 00:00 KST) + retry + failure notification
+│       ├── generate-blog-post.yml     # Weekly blog generation (Sunday 10:00 KST) + retry + failure notification
+│       ├── generate-prediction.yml    # Weekly prediction post (Friday 19:00 KST) + retry + failure notification
+│       └── health-check.yml           # Health monitoring (after workflows + Monday 12:00 KST)
 └── src/
     ├── data/
     │   └── lotto.json                 # Pre-fetched lottery data (all rounds, with prizes)
@@ -95,8 +101,8 @@ lottery_kr/
     │       └── markdown.ts            # Zero-dependency markdown-to-HTML converter
     ├── components/
     │   ├── layout/
-    │   │   ├── Header.tsx             # Responsive header with mobile menu (includes 세금 계산기)
-    │   │   └── Footer.tsx             # 3-column footer with links (includes 세금 계산기)
+    │   │   ├── Header.tsx             # Responsive header with mobile menu (includes 오늘의 행운)
+    │   │   └── Footer.tsx             # 3-column footer with links (includes 오늘의 행운 번호)
     │   ├── lottery/
     │   │   ├── LottoBall.tsx          # Colored ball (official 5-color scheme)
     │   │   ├── LottoResultCard.tsx    # Result display card (prize per winner + total)
@@ -122,6 +128,9 @@ lottery_kr/
         │   │   ├── page.tsx           # Latest 20 results
         │   │   └── [round]/page.tsx   # Round detail (statically generated)
         │   ├── stats/page.tsx         # Statistics & frequency analysis
+        │   ├── lucky/
+        │   │   ├── page.tsx           # Daily lucky numbers (server, metadata)
+        │   │   └── LuckyClient.tsx    # Daily lucky numbers (client, deterministic PRNG)
         │   └── tax/
         │       ├── page.tsx           # Tax calculator (server, metadata)
         │       └── TaxCalculatorClient.tsx # Tax calculator UI (client)
@@ -247,9 +256,16 @@ GitHub Actions (cron: Sunday 10:00 KST)
 }
 ```
 
+### Resilience Features
+
+- **Retry with exponential backoff:** `callClaudeWithRetry()` — 3 attempts with 1s/2s/4s delay
+- **Content validation:** Checks minimum length (800+ chars), AI disclaimer presence, markdown headings
+- **Duplicate prevention:** Skips generation if output slug file already exists (exits cleanly)
+- **Increased output:** `max_tokens: 4000`, prompt targets 1500-2500 words for better SEO ranking
+
 ### Topic Rotation
 
-8 topic templates in `scripts/blog-topics.json`:
+12 topic templates in `scripts/blog-topics.json`:
 
 | Topic ID | Description |
 |----------|-------------|
@@ -261,6 +277,10 @@ GitHub Actions (cron: Sunday 10:00 KST)
 | `consecutive-numbers` | Consecutive number probability analysis |
 | `first-timer-guide` | Beginner's guide to lottery |
 | `historical-jackpot` | Historical jackpot records |
+| `prediction-preview` | Next round prediction analysis with recommended sets |
+| `dream-numbers` | Dream interpretation lottery number guide |
+| `comparison-analysis` | Lotto vs pension lottery comparison |
+| `sum-range-analysis` | Winning number sum range analysis |
 
 The script auto-selects: draw analysis for new rounds first, then rotates other topics by week number.
 
@@ -282,15 +302,16 @@ New posts are added weekly by GitHub Actions (see workflow section).
 
 ### Schedule & Cost
 
-- **Frequency:** Weekly (Sunday 10:00 KST via GitHub Actions cron)
+- **Blog posts:** Weekly (Sunday 10:00 KST via GitHub Actions cron)
+- **Prediction posts:** Weekly (Friday 19:00 KST via GitHub Actions cron)
 - **Model:** Claude Haiku 4.5 (`claude-haiku-4-5-20251001`)
-- **Cost:** ~$0.88/year for 52 weekly posts
-- **Manual trigger:** `workflow_dispatch` enabled in GitHub Actions
+- **Cost:** ~$1.76/year for ~104 posts (2/week: 1 blog + 1 prediction)
+- **Manual trigger:** `workflow_dispatch` enabled on all GitHub Actions workflows
 
 ### SEO Best Practices
 
 - Every post grounded in real data from `lotto.json`
-- 8 different topic templates for variety
+- 12 different topic templates for variety
 - Each post targets distinct long-tail keywords
 - AI disclaimer included: "이 글은 AI 분석 도구의 도움을 받아 작성되었으며, 실제 당첨 데이터를 기반으로 합니다."
 - Monitor Google Search Console and Naver Search Advisor
@@ -299,17 +320,49 @@ New posts are added weekly by GitHub Actions (see workflow section).
 
 ## GitHub Actions Workflows
 
+All workflows include: retry with 60s delay on first failure, auto-create GitHub Issue (with `automation-failure` label) on final failure, duplicate issue prevention.
+
 ### 1. Data Update (`update-data.yml`)
 
 - **Schedule:** Saturday 15:00 UTC = Sunday 00:00 KST (after Saturday lottery draw)
-- **Action:** Fetches latest lottery data, commits `src/data/lotto.json` if changed
+- **Action:** Fetches latest lottery data, validates, commits `src/data/lotto.json` if changed
+- **Permissions:** `contents: write`, `issues: write`
 - **Trigger:** Also available via `workflow_dispatch`
 
 ### 2. Blog Generation (`generate-blog-post.yml`)
 
 - **Schedule:** Sunday 01:00 UTC = Sunday 10:00 KST
 - **Action:** Updates data + generates blog post via Claude API + commits
+- **Permissions:** `contents: write`, `issues: write`
 - **Requires:** `ANTHROPIC_API_KEY` GitHub Actions secret
+
+### 3. Prediction Generation (`generate-prediction.yml`)
+
+- **Schedule:** Friday 10:00 UTC = Friday 19:00 KST (before Saturday draw)
+- **Action:** Updates data + generates prediction post for next round + commits
+- **Permissions:** `contents: write`, `issues: write`
+- **Requires:** `ANTHROPIC_API_KEY` GitHub Actions secret
+- **Output:** `content/blog/{nextRound}-prediction.json`
+
+### 4. Health Check (`health-check.yml`)
+
+- **Triggers:** After data-update / blog-generation / prediction workflows complete (`workflow_run`), plus weekly Monday 03:00 UTC = Monday 12:00 KST
+- **Checks:** Data freshness (>10 days = fail), data integrity (numbers/dates), blog posts (>14 days = fail), critical file existence (14 files)
+- **Permissions:** `contents: read`, `issues: write`
+- **Output:** JSON health report + human-readable summary
+
+### Weekly Automation Timeline
+
+| Day | Time (KST) | Event | Workflow |
+|-----|-----------|-------|----------|
+| Friday | 19:00 | Generate prediction blog post | `generate-prediction.yml` |
+| Saturday | 20:45 | Lotto draw (external) | — |
+| Sunday | 00:00 | Fetch new draw data (with retry) | `update-data.yml` |
+| Sunday | 10:00 | Generate draw analysis blog post | `generate-blog-post.yml` |
+| Monday | 12:00 | Health check (validates everything) | `health-check.yml` |
+| Daily | Midnight KST | Lucky numbers auto-rotate | Client-side (no workflow) |
+
+**GitHub Actions usage:** ~10 min/week → ~43 min/month (free tier: 2,000 min/month)
 
 ---
 
@@ -339,6 +392,69 @@ User fills form → POST /api/contact → Resend API
 - Add `RESEND_API_KEY` as Vercel environment variable
 - Sign up at [resend.com](https://resend.com) (free: 3,000 emails/month)
 - Optional: Add `lottery.io.kr` domain in Resend for branded sender (instead of `onboarding@resend.dev`)
+
+---
+
+## Daily Lucky Numbers (IMPLEMENTED)
+
+Daily-changing lottery numbers at `/lotto/lucky`. Zero API cost — entirely client-side.
+
+### Architecture
+
+- **Deterministic PRNG:** Mulberry32 algorithm seeded with KST date as `YYYYMMDD` integer
+- **Same numbers for everyone:** All visitors on the same day see the same 6 numbers
+- **Countdown timer:** Shows time until midnight KST when numbers change
+- **Hydration-safe:** Uses `mounted` state pattern (same as `DrawCountdown.tsx`)
+
+### Components
+
+- **`src/app/lotto/lucky/page.tsx`** — Server component (metadata + breadcrumb + SEO)
+- **`src/app/lotto/lucky/LuckyClient.tsx`** — Client component (PRNG, countdown, share buttons)
+
+### Share Buttons
+
+Same 3-button pattern as `RecommendResult.tsx`: Copy / KakaoTalk / Web Share API
+
+### Navigation
+
+Linked from: Header nav ("오늘의 행운"), Footer (under 서비스), Lotto landing page (feature card), Sitemap (`changeFrequency: "daily"`)
+
+---
+
+## Self-Sufficient Automation (IMPLEMENTED)
+
+The site runs fully autonomously with zero user intervention. All automation includes retry logic, validation, and failure notifications.
+
+### Data Pipeline Resilience (`scripts/update-data.ts`)
+
+- **`fetchWithRetry()`:** 3 attempts with exponential backoff (1s/2s/4s)
+- **`validateData()`:** Checks numbers 1-45 range, no duplicates, valid dates, sequential rounds
+- **`backupExistingData()`:** Copies `lotto.json` → `lotto.json.bak` before overwrite
+- **Exit code 1** on validation failure (prevents corrupt data from being committed)
+
+### Blog Pipeline Resilience (`scripts/generate-blog-post.ts`)
+
+- **`callClaudeWithRetry()`:** 3 attempts with exponential backoff
+- **`validateContent()`:** Checks min length (800 chars), AI disclaimer, markdown headings
+- **Duplicate prevention:** Skips if output slug file exists (exit code 0)
+- **Increased output:** `max_tokens: 4000`, targets 1500-2500 words
+
+### Prediction Pipeline (`scripts/generate-prediction.ts`)
+
+- Computes hot/cold numbers from recent 20 draws
+- Generates 3 AI recommendation sets (hot-number based, composite, balanced)
+- Rich context prompt with recent 10 draws + statistical analysis
+- Built-in duplicate prevention + retry
+
+### Health Monitoring (`scripts/health-check.ts`)
+
+4 automated checks:
+1. **Data freshness:** Fail if data >10 days old
+2. **Data integrity:** Valid numbers, dates, sequential rounds (sampled)
+3. **Blog posts:** Fail if latest post >14 days old
+4. **Critical files:** 14 essential files must exist
+
+Outputs JSON report + human-readable summary. Exit code 1 triggers GitHub Issue.
 
 ---
 
@@ -498,36 +614,36 @@ Data from superkts.com was cross-verified against 4 independent sources for roun
 |----------|---------|--------------|-------------|
 | **HIGH** | 로또 명당 판매점 찾기 (winning store locator) | 20K+/mo | lottoen, pyony, lottoplay |
 | **HIGH** | 연금복권 720+ support | 10K+/mo | pyony, freetto, dhlottery |
-| **HIGH** | 로또 시뮬레이터 (lottery simulator) | 5K+/mo | Multiple standalone sites |
+| ~~**HIGH**~~ | ~~로또 시뮬레이터 (lottery simulator)~~ | ~~5K+/mo~~ | **DONE** (`/lotto/simulator`) |
 | **HIGH** | 꿈해몽 번호 (dream interpretation numbers) | 15K+/mo | lottorich, dedicated apps |
 | **MEDIUM** | 운세/별자리 번호 (fortune/zodiac numbers) | 5K+/mo | lotto.co.kr, lottorich |
-| **MEDIUM** | 오늘의 행운 번호 (daily lucky numbers) | 5K+/mo | superkts, lotto.co.kr |
-| **MEDIUM** | 다음 추첨 카운트다운 (countdown timer) | — | lottoplay, pyony |
-| **MEDIUM** | FAQ 페이지 + 구조화된 데이터 | Various | Most competitors |
+| ~~**MEDIUM**~~ | ~~오늘의 행운 번호 (daily lucky numbers)~~ | ~~5K+/mo~~ | **DONE** (`/lotto/lucky`) |
+| ~~**MEDIUM**~~ | ~~다음 추첨 카운트다운 (countdown timer)~~ | ~~—~~ | **DONE** (homepage) |
+| ~~**MEDIUM**~~ | ~~FAQ 페이지 + 구조화된 데이터~~ | ~~Various~~ | **DONE** (`/faq`) |
 | **LOW** | Community forum | — | lottorich, lottoplay |
 | **LOW** | Mobile app (iOS/Android) | — | lottorich, lottoplay |
 
 ### SEO Gaps to Fix
 
-| Issue | Impact | Effort |
-|-------|--------|--------|
-| No `og:image` on any page — social shares show no preview | High | Low |
-| Sitemap only includes latest 100 rounds (1,110+ excluded) | High | Low |
-| `/lotto/tax` missing from sitemap | Medium | Low |
-| No `FAQPage` JSON-LD structured data | High | Medium |
-| No `BreadcrumbList` structured data | Medium | Low |
-| No per-number detail pages (`/lotto/numbers/[num]`) | High | Medium |
-| Blog posts don't link to site features (internal linking) | Medium | Low |
-| Tax calculator not linked from result cards | Medium | Low |
-| No Naver Blog cross-posting (70%+ Korean searches on Naver) | Very High | Ongoing |
+| Issue | Impact | Effort | Status |
+|-------|--------|--------|--------|
+| No `og:image` on any page — social shares show no preview | High | Low | Open |
+| ~~Sitemap only includes latest 100 rounds (1,110+ excluded)~~ | ~~High~~ | ~~Low~~ | **FIXED** |
+| ~~`/lotto/tax` missing from sitemap~~ | ~~Medium~~ | ~~Low~~ | **FIXED** |
+| ~~No `FAQPage` JSON-LD structured data~~ | ~~High~~ | ~~Medium~~ | **FIXED** |
+| ~~No `BreadcrumbList` structured data~~ | ~~Medium~~ | ~~Low~~ | **FIXED** |
+| ~~No per-number detail pages (`/lotto/numbers/[num]`)~~ | ~~High~~ | ~~Medium~~ | **FIXED** |
+| Blog posts don't link to site features (internal linking) | Medium | Low | Open |
+| Tax calculator not linked from result cards | Medium | Low | Open |
+| No Naver Blog cross-posting (70%+ Korean searches on Naver) | Very High | Ongoing | Open |
 
 ### UX Improvements Needed
 
-- Replace `alert()` with toast notifications (copy confirmation)
+- ~~Replace `alert()` with toast notifications~~ — **DONE** (Toast component)
 - Add number generation animation (rolling/revealing effect)
-- Add results search/filter and pagination (currently only latest 20)
-- Add active navigation state to Header
-- Add breadcrumbs on detail pages
+- ~~Add results search/filter and pagination~~ — **DONE**
+- ~~Add active navigation state to Header~~ — **DONE**
+- ~~Add breadcrumbs on detail pages~~ — **DONE**
 - Improve mobile share button tap targets
 
 ---
@@ -537,32 +653,34 @@ Data from superkts.com was cross-verified against 4 independent sources for roun
 ### Phase 1: COMPLETE
 Core Lotto 6/45 — recommendations, stats, results, tax calculator, blog, contact, GA4, KakaoTalk share
 
-### Phase 2: Quick Wins (1-2 weeks each, high impact)
+### Phase 2: COMPLETE
+Quick wins — simulator, SEO fixes, FAQ, countdown, toast notifications, blog post length, self-sufficient automation
 
 | # | Feature | Target Keywords | Status |
 |---|---------|----------------|--------|
-| 2.1 | **Lottery simulator** (`/lotto/simulator`) — simulate 1K-100K draws, show total spent vs won | 로또 시뮬레이터 | Not started |
+| 2.1 | **Lottery simulator** (`/lotto/simulator`) | 로또 시뮬레이터 | **DONE** |
 | 2.2 | **OG images** — branded preview images for social sharing | — (CTR improvement) | Not started |
-| 2.3 | **Fix sitemap** — include all 1,210+ rounds + tax page | — (indexing improvement) | Not started |
-| 2.4 | **FAQ page** (`/faq`) with `FAQPage` JSON-LD | 로또 구매 방법, 당첨금 수령 | Not started |
-| 2.5 | **실수령액 계산기** branding — add alias/keyword to tax page title | 로또 실수령액 | Not started |
-| 2.6 | **Next draw countdown** on homepage | — (return visits) | Not started |
-| 2.7 | **Toast notifications** — replace `alert()` with polished toasts | — (UX) | Not started |
-| 2.8 | **Blog post length** — increase to 2,000+ chars for better ranking | — (SEO) | Not started |
+| 2.3 | **Fix sitemap** — include all 1,210+ rounds + tax page | — (indexing improvement) | **DONE** |
+| 2.4 | **FAQ page** (`/faq`) with `FAQPage` JSON-LD | 로또 구매 방법, 당첨금 수령 | **DONE** |
+| 2.5 | **실수령액 계산기** branding | 로또 실수령액 | **DONE** |
+| 2.6 | **Next draw countdown** on homepage | — (return visits) | **DONE** |
+| 2.7 | **Toast notifications** — replace `alert()` with polished toasts | — (UX) | **DONE** |
+| 2.8 | **Blog post length** — increase to 1,500-2,500 words | — (SEO) | **DONE** |
+| 2.9 | **Self-sufficient automation** — retry, validation, health monitoring | — (reliability) | **DONE** |
 
 ### Phase 3: Medium-term (1-3 months, significant traffic growth)
 
 | # | Feature | Target Keywords | Status |
 |---|---------|----------------|--------|
 | 3.1 | **꿈해몽 번호 생성기** (`/lotto/dream`) — dream symbol → number mapping | 로또 꿈해몽, 꿈 번호 추천 | Not started |
-| 3.2 | **오늘의 행운 번호** (`/lotto/lucky`) — daily changing numbers | 오늘의 로또 번호, 행운의 번호 | Not started |
+| 3.2 | **오늘의 행운 번호** (`/lotto/lucky`) — daily changing numbers | 오늘의 로또 번호, 행운의 번호 | **DONE** |
 | 3.3 | **연금복권 720+** (`/pension/`) — results, stats, recommendations | 연금복권 당첨번호, 연금복권 확률 | Not started |
-| 3.4 | **Per-number detail pages** (`/lotto/numbers/[num]`) — 45 new SEO pages | 로또 번호 7 통계, 번호별 출현 빈도 | Not started |
-| 3.5 | **이번주 예상번호** — auto-generated pre-draw prediction page | 1212회 로또 예상번호 | Not started |
+| 3.4 | **Per-number detail pages** (`/lotto/numbers/[num]`) — 45 new SEO pages | 로또 번호 7 통계, 번호별 출현 빈도 | **DONE** |
+| 3.5 | **이번주 예상번호** — auto-generated pre-draw prediction page | 1212회 로또 예상번호 | **DONE** |
 | 3.6 | **Naver Blog cross-posting** — 2-3 posts/week, link back to site | — (Naver organic traffic) | Not started |
-| 3.7 | **BreadcrumbList + internal linking** improvements | — (SEO) | Not started |
+| 3.7 | **BreadcrumbList + internal linking** improvements | — (SEO) | **DONE** |
 | 3.8 | **Number generation animation** — rolling/revealing ball effect | — (engagement) | Not started |
-| 3.9 | **Results search/filter/pagination** — search by round, number, date | — (UX, dwell time) | Not started |
+| 3.9 | **Results search/filter/pagination** — search by round, number, date | — (UX, dwell time) | **DONE** |
 
 ### Phase 4: Long-term (3-6 months, major features)
 
@@ -581,8 +699,8 @@ Core Lotto 6/45 — recommendations, stats, results, tax calculator, blog, conta
 
 | Content Type | Target Keywords | Frequency |
 |---|---|---|
-| Weekly draw analysis | "1211회 당첨번호 분석" | Weekly (automated) |
-| Pre-draw predictions | "이번주 로또 예상번호" | Weekly (new) |
+| Weekly draw analysis | "1211회 당첨번호 분석" | Weekly (automated, Sunday) |
+| Pre-draw predictions | "이번주 로또 예상번호" | Weekly (automated, Friday) |
 | Dream interpretation guides | "로또 꿈해몽", "돼지꿈 번호" | 2-3/month |
 | Winner store stories | "[지역] 로또 명당" | Monthly |
 | Comparison content | "로또 vs 연금복권", "로또 vs 주식" | Monthly |
