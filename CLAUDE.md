@@ -115,7 +115,10 @@ lottery_kr/
     │   ├── lottery/
     │   │   ├── LottoBall.tsx          # Colored ball (official 5-color scheme)
     │   │   ├── LottoResultCard.tsx    # Result display card (prize per winner + total)
-    │   │   └── RecommendResult.tsx    # Client component with copy/KakaoTalk share/Web Share
+    │   │   ├── RecommendResult.tsx    # Client component with copy/KakaoTalk share/Web Share
+    │   │   └── ResultsCountdown.tsx   # 3-phase countdown (before draw → after draw → results available)
+    │   ├── blog/
+    │   │   └── PredictionResults.tsx  # Shows actual results on prediction posts when available
     │   ├── charts/
     │   │   └── FrequencyChart.tsx     # Chart.js bar chart
     │   └── ads/
@@ -429,6 +432,43 @@ Same 3-button pattern as `RecommendResult.tsx`: Copy / KakaoTalk / Web Share API
 ### Navigation
 
 Linked from: Header nav ("오늘의 행운"), Footer (under 서비스), Lotto landing page (feature card), Sitemap (`changeFrequency: "daily"`)
+
+---
+
+## Prediction-to-Results Lifecycle (IMPLEMENTED)
+
+Prediction blog posts are living documents that track the full lifecycle from prediction through draw to results.
+
+### Components
+
+- **`src/components/lottery/ResultsCountdown.tsx`** — Client component with 3-phase countdown
+- **`src/components/blog/PredictionResults.tsx`** — Client component that enriches prediction posts with actual results
+
+### 3-Phase Lifecycle
+
+| Phase | Condition | Display |
+|-------|-----------|---------|
+| `before-draw` | KST < Saturday 20:45 of round's draw week | Blue gradient: countdown to draw |
+| `after-draw` | Saturday 20:45 <= KST < Sunday 00:15 | Amber gradient: countdown to results |
+| `results-available` | KST >= Sunday 00:15 OR result data exists | Green: actual winning numbers + link to results |
+
+### How It Works
+
+1. **Friday 19:00 KST:** `generate-prediction.yml` creates `{round}-prediction.json` -> Vercel rebuild -> prediction page shows countdown (blue)
+2. **Saturday 20:45 KST:** Draw happens -> client auto-transitions to "after-draw" countdown (amber) -> no rebuild needed
+3. **Sunday 00:00 KST:** `update-data.yml` fetches new round -> Vercel rebuild -> prediction page shows actual results inline (green)
+4. **Blog slug detection:** `parsePredictionSlug()` in `blog.ts` matches `{round}-prediction` pattern
+5. **Server-side enrichment:** `blog/[slug]/page.tsx` calls `getLottoResult(round)` to inject results at build time
+
+### Homepage Integration
+
+`ResultsCountdown` renders below `DrawCountdown` on homepage. Self-hides (returns `null`) during Mon-Fri when not relevant. Only visible Saturday evening through Sunday.
+
+### Constants
+
+- `LOTTO_DRAW_HOUR = 20`, `LOTTO_DRAW_MINUTE = 45` — Saturday draw time in KST
+- `LOTTO_RESULTS_DELAY_MINUTES = 15` — delay after Sunday 00:00 KST for results availability
+- `getDrawDateForRound(round)` in `kst.ts` — calculates Saturday draw date from round number
 
 ---
 

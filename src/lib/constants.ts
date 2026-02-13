@@ -30,6 +30,13 @@ export const LOTTO_SECTIONS: readonly [number, number][] = [
   [37, 45],
 ];
 
+/** Saturday draw time in KST */
+export const LOTTO_DRAW_HOUR = 20;
+export const LOTTO_DRAW_MINUTE = 45;
+
+/** Approximate delay (minutes) after Sunday 00:00 KST for results to be available */
+export const LOTTO_RESULTS_DELAY_MINUTES = 15;
+
 /** Default counts for data queries */
 export const DEFAULT_RECENT_DRAWS = 20;
 export const DEFAULT_RECENT_RESULTS = 10;

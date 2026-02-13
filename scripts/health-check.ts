@@ -229,6 +229,8 @@ function checkCriticalFiles(): CheckResult {
     "src/components/lottery/LottoBall.tsx",
     "src/components/lottery/LottoResultCard.tsx",
     "src/components/lottery/RecommendResult.tsx",
+    "src/components/lottery/ResultsCountdown.tsx",
+    "src/components/blog/PredictionResults.tsx",
     // Data loading
     "src/lib/api/dhlottery.ts",
     "src/lib/blog.ts",

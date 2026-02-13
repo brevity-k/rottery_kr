@@ -1,9 +1,11 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { getAllBlogPosts, getBlogPost } from "@/lib/blog";
+import { getAllBlogPosts, getBlogPost, parsePredictionSlug } from "@/lib/blog";
+import { getLottoResult } from "@/lib/api/dhlottery";
 import { markdownToHtml } from "@/lib/utils/markdown";
 import { SITE_URL, SITE_NAME } from "@/lib/constants";
+import PredictionResults from "@/components/blog/PredictionResults";
 import AdBanner from "@/components/ads/AdBanner";
 import Breadcrumb from "@/components/ui/Breadcrumb";
 
@@ -42,6 +44,9 @@ export default async function BlogPostPage({ params }: Props) {
   const { slug } = await params;
   const post = getBlogPost(slug);
   if (!post) notFound();
+
+  const predictionRound = parsePredictionSlug(slug);
+  const predictionResult = predictionRound ? getLottoResult(predictionRound) : null;
 
   const contentHtml = markdownToHtml(post.content);
   const allPosts = getAllBlogPosts();
@@ -94,6 +99,10 @@ export default async function BlogPostPage({ params }: Props) {
           </h1>
           <p className="text-gray-600">{post.description}</p>
         </div>
+
+        {predictionRound && (
+          <PredictionResults round={predictionRound} result={predictionResult} />
+        )}
 
         <AdBanner slot="blog-detail-top" format="horizontal" className="mb-6" />
 

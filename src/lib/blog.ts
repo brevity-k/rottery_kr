@@ -49,3 +49,8 @@ export function getBlogPost(slug: string): BlogPost | null {
 export function getRecentBlogPosts(count: number = 5): BlogPost[] {
   return loadBlogPosts().slice(0, count);
 }
+
+export function parsePredictionSlug(slug: string): number | null {
+  const match = slug.match(/^(\d+)-prediction$/);
+  return match ? parseInt(match[1], 10) : null;
+}

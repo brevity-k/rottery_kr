@@ -8,6 +8,7 @@ import LottoResultCard from "@/components/lottery/LottoResultCard";
 import AdBanner from "@/components/ads/AdBanner";
 import LottoBall from "@/components/lottery/LottoBall";
 import DrawCountdown from "@/components/lottery/DrawCountdown";
+import ResultsCountdown from "@/components/lottery/ResultsCountdown";
 
 export const metadata: Metadata = {
   alternates: { canonical: "/" },
@@ -93,6 +94,7 @@ export default function Home() {
       {/* Next Draw Countdown */}
       <section className="mb-10">
         <DrawCountdown nextRound={latestRound + 1} />
+        <ResultsCountdown round={latestRound + 1} hasResult={false} />
       </section>
 
       <AdBanner slot="home-top" format="horizontal" className="mb-10" />
